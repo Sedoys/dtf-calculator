@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Калькулятор стоимости печати</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f9f9f9;
+      padding: 20px;
+    }
+    .calculator {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 400px;
+      margin: auto;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    }
+    h2 {
+      margin-top: 0;
+    }
+    .step {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin: 8px 0 4px;
+    }
+    input[type="number"] {
+      width: 100px;
+      padding: 6px;
+      margin-right: 8px;
+    }
+    .btn {
+      padding: 10px 16px;
+      font-weight: bold;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+    }
+    .btn-primary {
+      background: #ff6a00;
+      color: white;
+    }
+    .btn-secondary {
+      background: #e0e0e0;
+    }
+    .add-row {
+      color: #007aff;
+      cursor: pointer;
+      margin-top: 10px;
+      display: inline-block;
+    }
+    .cost {
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .note {
+      font-size: 12px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="calculator">
+    <h2>Калькулятор стоимости</h2>
+
+    <div class="step">
+      <strong>Шаг 1 из 3</strong>
+      <div>
+        <label><input type="radio" name="type" value="dtf" checked> DTF печать</label>
+        <label><input type="radio" name="type" value="ufdtf"> UF DTF печать</label>
+        <label><input type="checkbox" id="clientProduct"> Печать на изделии клиента</label>
+      </div>
+    </div>
+
+    <div class="step">
+      <strong>Шаг 2 из 3</strong>
+      <div id="print-rows">
+        <div class="print-row">
+          <label>Размер принта (см):</label>
+          <input type="number" placeholder="Ширина" class="width" /> ×
+          <input type="number" placeholder="Высота" class="height" />
+          <label>Количество:</label>
+          <input type="number" class="quantity" />
+        </div>
+      </div>
+      <div class="add-row" onclick="addRow()">+ Добавить размер</div>
+    </div>
+
+    <div class="step">
+      <strong>Стоимость: <span class="cost" id="totalCost">0 ₽</span></strong>
+      <div class="note">Ориентировочная</div>
+    </div>
+
+    <div class="step">
+      <button class="btn btn-secondary" onclick="history.back()">Назад</button>
+      <button class="btn btn-primary" onclick="submitForm()">Оставить заявку</button>
+    </div>
+  </div>
+
+  <script>
+    const usableWidth = 58;
+
+    function getOptimalLengthWithRotation(width, height, quantity) {
+      const orientations = [
+        { w: width, h: height, rotated: false },
+        { w: height, h: width, rotated: true } // поворот на 90°
+      ];
+
+      let bestLength = Infinity;
+      let wasRotated = false;
+
+      orientations.forEach(({ w, h, rotated }) => {
+        if (w > usableWidth) return;
+
+        const printsPerRow = Math.floor(usableWidth / w);
+        if (printsPerRow === 0) return;
+
+        const rowsNeeded = Math.ceil(quantity / printsPerRow);
+        const lengthInMeters = (rowsNeeded * h) / 100;
+
+        if (lengthInMeters < bestLength) {
+          bestLength = lengthInMeters;
+          wasRotated = rotated;
+        }
+      });
+
+      return { length: bestLength, rotated: wasRotated };
+    } // ширина погонного метра в сантиметрах
+
+    function calculateCost() {
+      const type = document.querySelector('input[name="type"]:checked').value;
+      const rows = document.querySelectorAll('.print-row');
+      let total = 0;
+      let totalMeters = 0;
+      let baseRate = 1600;
+
+      if (type === 'dtf') {
+        if (totalMeters <= 3) baseRate = 1400;
+        else if (totalMeters <= 9) baseRate = 1300;
+        else if (totalMeters <= 29) baseRate = 1120;
+        else if (totalMeters <= 49) baseRate = 900;
+        else baseRate = 850;
+      } else if (type === 'ufdtf') {
+        if (totalMeters <= 3) baseRate = 2000;
+        else if (totalMeters <= 5) baseRate = 1800;
+        else if (totalMeters <= 10) baseRate = 1600;
+        else if (totalMeters <= 30) baseRate = 1400;
+        else baseRate = 1300;
+      } // Цена за погонный метр
+
+      rows.forEach(row => {
+        const notice = row.querySelector('.rotation-notice');
+        if (notice) notice.remove();
+
+        if (width > 0 && height > 0 && quantity > 0) {
+          const printsPerRow = Math.floor(usableWidth / width);
+          const rowsNeeded = Math.ceil(quantity / printsPerRow);
+          const result = getOptimalLengthWithRotation(width, height, quantity);
+          const lengthInMeters = result.length;
+          totalMeters += lengthInMeters;
+
+          if (result.rotated) {
+            const rotationNotice = document.createElement('div');
+            rotationNotice.className = 'rotation-notice';
+            rotationNotice.style.color = '#f90';
+            rotationNotice.style.fontSize = '12px';
+            rotationNotice.innerText = 'Поворот применён для экономии материала';
+            row.appendChild(rotationNotice);
+          } // перевести в метры
+          total += lengthInMeters * baseRate;
+        }
+      });
+
+      document.getElementById('totalCost').innerText = `${Math.round(total)} ₽`;
+    }
+
+    function addRow() {
+      const row = document.createElement('div');
+      row.classList.add('print-row');
+      row.innerHTML = `
+        <label>Размер принта (см):</label>
+        <input type="number" placeholder="Ширина" class="width" /> ×
+        <input type="number" placeholder="Высота" class="height" />
+        <label>Количество:</label>
+        <input type="number" class="quantity" />
+      `;
+      document.getElementById('print-rows').appendChild(row);
+      row.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', calculateCost);
+      });
+    }
+
+    document.querySelectorAll('input').forEach(input => {
+      input.addEventListener('input', calculateCost);
+    });
+
+    function submitForm() {
+      alert('Заявка отправлена!');
+      // Здесь можно сделать интеграцию с Bitrix24 или другим API
+    }
+  </script>
+</body>
+</html>
